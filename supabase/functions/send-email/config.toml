@@ -1,0 +1,24 @@
+# Configuration de la fonction Edge d'envoi d'emails
+
+[build]
+enabled = true
+
+[functions]
+# Taille maximale du corps de la requête (en Mo)
+max_request_size = 5
+
+# Durée maximale d'exécution (en secondes)
+execution_timeout = 30
+
+# Mémoire allouée (en Mo)
+memory = 256
+
+# Variables d'environnement nécessaires
+[env]
+# URL de votre projet Supabase
+SUPABASE_URL = "https://akqkiqltpkdpgjnjwpaa.supabase.co"
+# Clé de service (à sécuriser)
+SUPABASE_SERVICE_ROLE_KEY = "hYmFzsZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6jIyMSwiZXMDc2ODAyMjIxfQ.VkwLWP2xfanCeh94pigdYc"
+# Configuration optionnelle pour un fournisseur d'email externe
+# SENDGRID_API_KEY = ""
+# EMAIL_FROM = "krsidoine@gmail.com"  
