@@ -21,7 +21,8 @@ const securityHeaders = [
   },
   {
     key: 'Content-Security-Policy',
-    value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none';"
+    value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co https://cdnjs.cloudflare.com https://unpkg.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://cdnjs.cloudflare.com https://unpkg.com; frame-ancestors 'none';"
+
   }
 ]
 

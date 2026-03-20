@@ -4,7 +4,9 @@
  * Usage: node test-mailzeet.js votre-email@example.com
  */
 
+// Essayer de charger .env.local d'abord, puis .env par défaut
 require('dotenv').config({ path: '.env.local' });
+require('dotenv').config();
 
 // Couleurs pour le terminal
 const colors = {
@@ -39,7 +41,7 @@ async function testMailzeetConfig() {
 
   // Récupérer l'email destinataire depuis les arguments
   const recipientEmail = process.argv[2];
-  
+
   if (!recipientEmail) {
     log(colors.red, '❌ Erreur : Veuillez fournir un email destinataire');
     log(colors.yellow, '\nUsage: node test-mailzeet.js votre-email@example.com\n');
@@ -94,7 +96,7 @@ async function testMailzeetConfig() {
 
     if (!response.ok) {
       log(colors.red, '\n❌ Erreur lors de l\'envoi de l\'email :');
-      
+
       if (response.status === 401) {
         log(colors.yellow, '\n🔑 Erreur d\'authentification - Vérifiez votre clé API');
         log(colors.yellow, '   La clé API doit être correcte et active');
@@ -105,7 +107,7 @@ async function testMailzeetConfig() {
         log(colors.red, `   Code: ${response.status}`);
         log(colors.red, `   Message: ${result.message || 'Erreur inconnue'}`);
       }
-      
+
       log(colors.red, `\n   Détails: ${JSON.stringify(result, null, 2)}`);
       log(colors.yellow, '\n💡 Consultez la documentation : https://docs.mailzeet.com\n');
       process.exit(1);

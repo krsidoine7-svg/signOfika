@@ -6,7 +6,9 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Send, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Send, Plus, Trash2, Clock, Calendar } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 
 interface Submitter {
   email: string
@@ -22,6 +24,10 @@ export default function SendTemplatePage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [isSequential, setIsSequential] = useState(false)
+  const [expiresInDays, setExpiresInDays] = useState<number | ''>(7)
+  const [reminderIntervalDays, setReminderIntervalDays] = useState<number>(2)
+
 
   useEffect(() => {
     loadTemplate()
@@ -70,9 +76,15 @@ export default function SendTemplatePage({ params }: { params: Promise<{ id: str
         },
         body: JSON.stringify({
           template_id: resolvedParams.id,
-          submitters: submitters.filter(s => s.email && s.name),
+          submitters: submitters
+            .filter(s => s.email && s.name)
+            .map((s, index) => ({ ...s, position: index })),
           message,
+          is_sequential: isSequential,
+          expires_in_days: expiresInDays || null,
+          reminder_interval_days: reminderIntervalDays,
         }),
+
       })
 
       if (!response.ok) {
@@ -122,8 +134,31 @@ export default function SendTemplatePage({ params }: { params: Promise<{ id: str
 
               {/* Submitters Section */}
               <div className="space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-burgundy-50 border border-burgundy-100 rounded-2xl mb-6">
+                  <div>
+                    <h3 className="font-bold text-navy-900 flex items-center gap-2">
+                       🔄 Signature Séquentielle
+                    </h3>
+                    <p className="text-xs text-navy-700 opacity-70">
+                      Les signataires recevront l'invitation l'un après l'autre, dans l'ordre de la liste.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-burgundy-200">
+                    <span className="text-xs font-bold uppercase tracking-widest text-burgundy-800">
+                      {isSequential ? 'Activée' : 'Désactivée'}
+                    </span>
+                    <input 
+                      type="checkbox" 
+                      className="w-10 h-5 bg-gray-200 rounded-full appearance-none checked:bg-burgundy-600 transition-all cursor-pointer relative before:content-[''] before:absolute before:w-4 before:h-4 before:bg-white before:rounded-full before:top-0.5 before:left-0.5 before:transition-all checked:before:left-5.5"
+                      checked={isSequential}
+                      onChange={(e) => setIsSequential(e.target.checked)}
+                    />
+                  </div>
+                </div>
+
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold text-navy-900">Signataires</h3>
+
                   <Button
                     type="button"
                     variant="outline"
@@ -181,6 +216,42 @@ export default function SendTemplatePage({ params }: { params: Promise<{ id: str
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Advanced Options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border border-gray-200 rounded-2xl">
+                <div className="space-y-2">
+                  <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-burgundy-600" />
+                    Expiration du document (jours)
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={expiresInDays}
+                    onChange={(e) => setExpiresInDays(e.target.value ? parseInt(e.target.value) : '')}
+                    placeholder="7 (aucune = illimité)"
+                    className="rounded-xl border-gray-200 h-11"
+                  />
+                  <p className="text-xs text-gray-400 pl-1">Laissez vide pour aucune expiration</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-burgundy-600" />
+                    Rappels automatiques (jours)
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={reminderIntervalDays}
+                    onChange={(e) => setReminderIntervalDays(parseInt(e.target.value) || 2)}
+                    placeholder="2"
+                    className="rounded-xl border-gray-200 h-11"
+                  />
+                  <p className="text-xs text-gray-400 pl-1">Par défaut : rappel tous les 2 jours</p>
+                </div>
               </div>
 
               {/* Message Section */}

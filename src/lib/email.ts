@@ -1,6 +1,9 @@
+import * as React from 'react'
 import { render } from '@react-email/render'
-import SignatureRequestEmail from '../../emails/signature-request'
-import SignatureCompletedEmail from '../../emails/signature-completed'
+
+import { SignatureRequestEmail } from '../emails/signature-request'
+import { SignatureCompletedEmail } from '../emails/signature-completed'
+
 
 // Configuration Mailzeet
 const MAILZEET_API_URL = 'https://api.mailzeet.com/v1/mails'
@@ -81,24 +84,36 @@ export async function sendSignatureRequest({
   documentName,
   signUrl,
   message,
+  brandLogoUrl,
+  companyUrl,
+  brandColor,
 }: {
   to: string
   signerName: string
   documentName: string
   signUrl: string
   message?: string
+  brandLogoUrl?: string
+  companyUrl?: string
+  brandColor?: string
 }) {
   return sendEmail({
     to,
     subject: `📝 Signature requise : ${documentName}`,
-    react: SignatureRequestEmail({
-      signerName,
+    react: React.createElement(SignatureRequestEmail, {
+
+      recipientName: signerName,
+      senderName: 'SignOfika',
       documentName,
-      signUrl,
+      signatureUrl: signUrl,
       message,
+      brandLogoUrl,
+      companyUrl,
+      brandColor,
     }),
   })
 }
+
 
 /**
  * Envoie une notification de signature complétée
@@ -108,19 +123,31 @@ export async function sendSignatureCompleted({
   documentName,
   downloadUrl,
   senderName,
+  brandLogoUrl,
+  companyUrl,
+  brandColor,
 }: {
   to: string
   documentName: string
   downloadUrl: string
   senderName: string
+  brandLogoUrl?: string
+  companyUrl?: string
+  brandColor?: string
 }) {
   return sendEmail({
     to,
     subject: `✅ Document signé : ${documentName}`,
-    react: SignatureCompletedEmail({
+    react: React.createElement(SignatureCompletedEmail, {
+
+      recipientName: 'Utilisateur',
       documentName,
       downloadUrl,
-      senderName,
+      submitterName: senderName,
+      brandLogoUrl,
+      companyUrl,
+      brandColor,
     }),
   })
 }
+

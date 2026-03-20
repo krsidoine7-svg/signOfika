@@ -24,7 +24,7 @@ const PdfFieldEditor = dynamic(
 
 interface Field {
   id: string
-  type: 'signature' | 'text' | 'date'
+  type: 'signature' | 'text' | 'date' | 'checkbox'
   page: number
   x: number
   y: number
@@ -75,7 +75,9 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       })
       if (response.ok) {
         toast.success('Template sauvegardé avec succès !')
+        router.push('/templates')
       } else {
+
         throw new Error('Erreur lors de la sauvegarde')
       }
     } catch (error) {

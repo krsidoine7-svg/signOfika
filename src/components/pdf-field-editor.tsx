@@ -13,20 +13,26 @@ import {
   Type,
   Calendar,
   Trash2,
-  Save
+  Save,
+  CheckSquare,
+  Square
 } from 'lucide-react'
+
 import { toast } from 'sonner'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 
-// Configuration du worker PDF.js
+// Configuration du worker PDF.js local
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 }
+
+
 
 interface Field {
   id: string
-  type: 'signature' | 'text' | 'date'
+  type: 'signature' | 'text' | 'date' | 'checkbox'
+
   page: number
   x: number
   y: number
@@ -55,7 +61,8 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
   const [saving, setSaving] = useState(false)
   
   // Mode dessin (comme DocuSeal)
-  const [drawingMode, setDrawingMode] = useState<'signature' | 'text' | 'date' | null>(null)
+  const [drawingMode, setDrawingMode] = useState<'signature' | 'text' | 'date' | 'checkbox' | null>(null)
+
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
   const [drawCurrent, setDrawCurrent] = useState<{ x: number; y: number } | null>(null)
 
@@ -75,10 +82,11 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
   }
 
   // Activer le mode dessin (comme DocuSeal)
-  const startDrawingMode = (type: 'signature' | 'text' | 'date') => {
+  const startDrawingMode = (type: 'signature' | 'text' | 'date' | 'checkbox') => {
     setDrawingMode(type)
     setSelectedField(null)
-    const label = type === 'signature' ? 'Signature' : type === 'text' ? 'Texte' : 'Date'
+    const label = type === 'signature' ? 'Signature' : type === 'text' ? 'Texte' : type === 'date' ? 'Date' : 'Case à cocher'
+
     toast.info(`🎨 Mode dessin activé - Dessinez le champ "${label}" sur le PDF`, {
       duration: 3000,
     })
@@ -107,7 +115,8 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
       y,
       width,
       height,
-      label: drawingMode === 'signature' ? 'Signature' : drawingMode === 'text' ? 'Texte' : 'Date',
+      label: drawingMode === 'signature' ? 'Signature' : drawingMode === 'text' ? 'Texte' : drawingMode === 'date' ? 'Date' : 'Case',
+
       required: true,
     }
 
@@ -220,12 +229,15 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
 
   const currentPageFields = fields.filter(f => f.page === pageNumber)
 
-  // Mémoïser les props pour éviter les re-renders inutiles
+  // Mémoïser les props pour éviter les re-renders inutiles et les warnings console
   const fileOptions = useMemo(() => ({ url }), [url])
   const pdfOptions = useMemo(() => ({
-    cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+    cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/cmaps/`,
     cMapPacked: true,
+    standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/standard_fonts/`
   }), [])
+
+
 
   return (
     <div className="space-y-4">
@@ -283,7 +295,16 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
             <Calendar className="h-4 w-4" />
             <span className="hidden sm:inline">Date</span>
           </button>
+          <button
+            onClick={() => startDrawingMode('checkbox')}
+            className="group relative px-4 py-2 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2 font-medium"
+            title="Ajouter une case à cocher"
+          >
+            <CheckSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Case</span>
+          </button>
         </div>
+
 
         {/* Zoom */}
         <div className="flex items-center gap-2">
@@ -384,15 +405,17 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
                     top: Math.min(drawStart.y, drawCurrent.y) * scale,
                     width: Math.abs(drawCurrent.x - drawStart.x) * scale,
                     height: Math.abs(drawCurrent.y - drawStart.y) * scale,
-                    borderColor: drawingMode === 'signature' ? '#3b82f6' : drawingMode === 'text' ? '#10b981' : '#a855f7',
-                    backgroundColor: drawingMode === 'signature' ? '#3b82f6' : drawingMode === 'text' ? '#10b981' : '#a855f7',
+                    borderColor: drawingMode === 'signature' ? '#3b82f6' : drawingMode === 'text' ? '#10b981' : drawingMode === 'date' ? '#a855f7' : '#f97316',
+                    backgroundColor: drawingMode === 'signature' ? '#3b82f6' : drawingMode === 'text' ? '#10b981' : drawingMode === 'date' ? '#a855f7' : '#f97316',
                   }}
                 >
                   <div className="flex items-center justify-center h-full text-white text-xs font-bold">
                     {drawingMode === 'signature' && '✍️ Signature'}
                     {drawingMode === 'text' && '📝 Texte'}
                     {drawingMode === 'date' && '📅 Date'}
+                    {drawingMode === 'checkbox' && '⬜ Case'}
                   </div>
+
                 </div>
               )}
 
@@ -432,7 +455,9 @@ export function PdfFieldEditor({ url, initialFields = [], onSave }: PdfFieldEdit
                       {field.type === 'signature' && <span className="text-base">✍️</span>} 
                       {field.type === 'text' && <span className="text-base">📝</span>}
                       {field.type === 'date' && <span className="text-base">📅</span>}
+                      {field.type === 'checkbox' && <span className="text-base">⬜</span>}
                       {field.label}
+
                     </span>
                     <button
                       onClick={(e) => {

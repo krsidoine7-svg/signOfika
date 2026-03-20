@@ -1,733 +1,555 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
 import { 
   User, 
-  Mail, 
-  Lock, 
-  CheckCircle, 
-  AlertCircle, 
-  Bell, 
-  Download, 
-  Image as ImageIcon,
-  SunMedium,
-  Moon,
-  Palette,
-  Key
+  Key, 
+  Settings as SettingsIcon, 
+  Plus, 
+  Trash2, 
+  Copy, 
+  Check, 
+  Loader2,
+  ShieldCheck,
+  Building2,
+  Phone,
+  Mail
 } from 'lucide-react'
-import { useTheme } from 'next-themes'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import ApiKeysSettings from '@/components/settings/api-keys'
+import { toast } from 'sonner'
+import { formatDate, cn } from '@/lib/utils'
+
 
 export default function SettingsPage() {
-  const router = useRouter()
-  const supabase = createClient()
-  const { theme, setTheme } = useTheme()
   const [activeTab, setActiveTab] = useState('profile')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState('')
   
+  // Profile state
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
+    company_name: '',
+    phone: '',
+    brand_color: '#800020',
+    brand_logo_url: '',
+    webhook_url: '',
+    company_url: ''
   })
 
-  const [notifications, setNotifications] = useState({
-    email: true,
-    documentSigned: true,
-    documentReceived: true,
-    weeklyDigest: false
-  })
-  
-  type NotificationKey = keyof typeof notifications
-  
-  const handleNotificationChange = (key: NotificationKey, value: boolean) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: value
-    }))
-  }
+
+
+  // API Keys state
+  const [keys, setKeys] = useState<any[]>([])
+  const [newKeyName, setNewKeyName] = useState('')
+  const [newKeyEnvironment, setNewKeyEnvironment] = useState('production')
+
+  const [generatedKey, setGeneratedKey] = useState(null)
+
+  const [showKeyDialog, setShowKeyDialog] = useState(false)
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (!user) {
-          router.push('/login')
-          return
-        }
+    loadData()
+  }, [])
 
-        // Récupérer les données du profil
-        const { data: profileData, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-        if (error) throw error
-
-        setProfile(prev => ({
-          ...prev,
-          full_name: profileData?.full_name || user.user_metadata?.full_name || '',
-          email: user.email || ''
-        }))
-      } catch (error) {
-        console.error('Error fetching profile:', error)
-        setMessage({ type: 'error', text: 'Erreur lors du chargement du profil' })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchProfile()
-  }, [router, supabase])
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setProfile(prev => ({
-      ...prev,
-      [name]: value
-    }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
     setSaving(true)
-    setMessage(null)
-
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Utilisateur non connecté')
-
-      // Mise à jour du mot de passe si fourni
-      if (profile.newPassword) {
-        if (profile.newPassword !== profile.confirmPassword) {
-          throw new Error('Les mots de passe ne correspondent pas')
-        }
-
-        const { error: passwordError } = await supabase.auth.updateUser({
-          password: profile.newPassword
-        })
-
-        if (passwordError) throw passwordError
-      }
-
-      // Mise à jour du profil
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          full_name: profile.full_name,
-          updated_at: new Date().toISOString()
-        })
-
-      if (profileError) throw profileError
-
-      // Mise à jour des métadonnées utilisateur
-      const { error: userError } = await supabase.auth.updateUser({
-        data: { full_name: profile.full_name }
-      })
-
-      if (userError) throw userError
-
-      setMessage({ type: 'success', text: 'Profil mis à jour avec succès' })
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
       
-      // Réinitialiser les champs de mot de passe
-      setProfile(prev => ({
-        ...prev,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      }))
+      const fileExt = file.name.split('.').pop()
+      const fileName = `branding/${Date.now()}.${fileExt}`
+      
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
 
+      if (error) throw error
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileName)
+
+      setProfile({ ...profile, brand_logo_url: publicUrl })
+      toast.success('Logo mis en ligne ! N\'oubliez pas d\'enregistrer le profil.')
     } catch (error: any) {
-      console.error('Error updating profile:', error)
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Erreur lors de la mise à jour du profil' 
-      })
+      toast.error('Erreur lors de l\'upload : ' + error.message)
     } finally {
       setSaving(false)
     }
   }
 
+  const loadData = async () => {
+
+    try {
+      setLoading(true)
+      const [profileRes, keysRes] = await Promise.all([
+        fetch('/api/profile'),
+        fetch('/api/keys')
+      ])
+
+      if (profileRes.ok) {
+        const { profile } = await profileRes.json()
+        setProfile(profile)
+      }
+
+      if (keysRes.ok) {
+        const { keys } = await keysRes.json()
+        setKeys(keys)
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error)
+      toast.error('Erreur lors du chargement des paramètres')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile)
+      })
+
+      if (response.ok) {
+        toast.success('Profil mis à jour avec succès')
+      } else {
+        throw new Error('Erreur lors de la mise à jour')
+      }
+    } catch (error) {
+      toast.error('Impossible de mettre à jour le profil')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCreateKey = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newKeyName) return
+
+    setSaving(true)
+    try {
+      const response = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: newKeyName,
+          environment: newKeyEnvironment 
+        })
+
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setGeneratedKey(data.key)
+        setKeys([data.keyData, ...keys])
+        setNewKeyName('')
+        toast.success('Clé API créée !')
+      } else {
+        throw new Error('Erreur lors de la création')
+      }
+    } catch (error) {
+      toast.error('Impossible de créer la clé API')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteKey = async (id: string) => {
+    try {
+      const response = await fetch(`/api/keys?id=${id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setKeys(keys.filter((k: any) => k.id !== id))
+        toast.success('Clé API révoquée')
+      }
+    } catch (error) {
+      toast.error('Impossible de révoquer la clé')
+    }
+  }
+
+  const handleToggleKey = async (id: string, currentStatus: boolean) => {
+    try {
+      const response = await fetch('/api/keys', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_active: !currentStatus })
+      })
+
+      if (response.ok) {
+        setKeys(keys.map((k: any) => k.id === id ? { ...k, is_active: !currentStatus } : k))
+        toast.info(currentStatus ? 'Clé désactivée' : 'Clé activée')
+      }
+    } catch (error) {
+      toast.error('Impossible de modifier le statut')
+    }
+  }
+
+  const copyToClipboard = (text: string) => {
+
+    navigator.clipboard.writeText(text)
+    toast.success('Copié dans le presse-papier')
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-burgundy-600"></div>
+      <div className="flex h-[80vh] items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-burgundy-600" />
       </div>
     )
   }
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      const file = e.target.files?.[0]
-      if (!file) return
-
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Math.random()}.${fileExt}`
-      const filePath = `avatars/${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file)
-
-      if (uploadError) throw uploadError
-
-      // Mettre à jour l'avatar dans la table profiles
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Utilisateur non connecté')
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: filePath })
-        .eq('id', user.id)
-
-      if (updateError) throw updateError
-
-      setAvatarUrl(URL.createObjectURL(file))
-      setMessage({ type: 'success', text: 'Photo de profil mise à jour avec succès' })
-    } catch (error) {
-      console.error('Error uploading avatar:', error)
-      setMessage({ type: 'error', text: 'Erreur lors du téléchargement de la photo' })
-    }
-  }
-
-  const handleExportData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Utilisateur non connecté')
-
-      // Récupérer les données de l'utilisateur
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      // Créer un objet avec toutes les données
-      const userData = {
-        profile: profileData,
-        metadata: user.user_metadata,
-        exportDate: new Date().toISOString()
-      }
-
-      // Créer et télécharger le fichier JSON
-      const dataStr = JSON.stringify(userData, null, 2)
-      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr)
-      
-      const exportFileName = `signofika-export-${new Date().toISOString().split('T')[0]}.json`
-      
-      const linkElement = document.createElement('a')
-      linkElement.setAttribute('href', dataUri)
-      linkElement.setAttribute('download', exportFileName)
-      linkElement.click()
-      
-      setMessage({ type: 'success', text: 'Données exportées avec succès' })
-    } catch (error) {
-      console.error('Error exporting data:', error)
-      setMessage({ type: 'error', text: 'Erreur lors de l\'exportation des données' })
-    }
-  }
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-navy-900 dark:text-white">Paramètres du compte</h1>
-        </div>
-        
-        {message && (
-          <div className={`mb-6 p-4 rounded-md ${
-            message.type === 'success' 
-              ? 'bg-green-50 text-green-800 border border-green-200 dark:bg-green-900/20 dark:border-green-800 dark:text-green-200' 
-              : 'bg-red-50 text-red-800 border border-red-200 dark:bg-red-900/20 dark:border-red-800 dark:text-red-200'
-          }`}>
-            <div className="flex items-center">
-              {message.type === 'success' ? (
-                <CheckCircle className="h-5 w-5 mr-2" />
+    <div className="container max-w-5xl py-10 px-4">
+      <div className="flex flex-col gap-2 mb-8">
+        <h1 className="text-4xl font-bold text-navy-900 tracking-tight flex items-center gap-3">
+          <SettingsIcon className="h-10 w-10 text-burgundy-600" />
+          Paramètres
+        </h1>
+        <p className="text-gray-600 text-lg">Gérez vos informations personnelles et votre accès API</p>
+      </div>
+
+      <Tabs defaultValue="profile" className="space-y-6" onValueChange={setActiveTab}>
+        <TabsList className="bg-white/50 backdrop-blur-md border border-gray-200 p-1 h-14 rounded-2xl shadow-sm">
+          <TabsTrigger value="profile" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-burgundy-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all">
+            <User className="h-4 w-4 mr-2" />
+            Profil public
+          </TabsTrigger>
+          <TabsTrigger value="apikeys" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-burgundy-600 data-[state=active]:text-white data-[state=active]:shadow-md transition-all">
+            <Key className="h-4 w-4 mr-2" />
+            Clés API
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          <Card className="bg-white border-gray-200 shadow-xl rounded-3xl overflow-hidden border-t-4 border-t-burgundy-600">
+            <form onSubmit={handleUpdateProfile}>
+              <CardHeader className="pb-4">
+                <CardTitle className="text-2xl text-navy-900 font-bold">Informations personnelles</CardTitle>
+                <CardDescription className="text-gray-500">Mettez à jour vos informations de contact et d'entreprise</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <User className="h-4 w-4 text-burgundy-600" /> Nom complet
+                    </Label>
+                    <Input 
+                      value={profile.full_name || ''} 
+                      onChange={(e) => setProfile({...profile, full_name: e.target.value})}
+                      placeholder="Jean Dupont"
+                      className="rounded-xl border-gray-200 focus:border-burgundy-500 transition-all text-navy-900 h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-burgundy-600" /> Email
+                    </Label>
+                    <Input 
+                      value={profile.email || ''} 
+                      disabled
+                      className="rounded-xl bg-gray-50 border-gray-200 text-gray-500 h-11"
+                    />
+                    <p className="text-[10px] text-gray-400 pl-1">Contactez le support pour modifier votre email</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-burgundy-600" /> Société (Optionnel)
+                    </Label>
+                    <Input 
+                      value={profile.company_name || ''} 
+                      onChange={(e) => setProfile({...profile, company_name: e.target.value})}
+                      placeholder="SignOfika Inc."
+                      className="rounded-xl border-gray-200 focus:border-burgundy-500 transition-all text-navy-900 h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-burgundy-600" /> Téléphone (Optionnel)
+                    </Label>
+                    <Input 
+                      value={profile.phone || ''} 
+                      onChange={(e) => setProfile({...profile, phone: e.target.value})}
+                      placeholder="+33 6 00 00 00 00"
+                      className="rounded-xl border-gray-200 focus:border-burgundy-500 transition-all text-navy-900 h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full border border-gray-200" style={{ backgroundColor: profile.brand_color }} />
+                      Couleur de marque
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        type="color"
+                        value={profile.brand_color || '#800020'} 
+                        onChange={(e) => setProfile({...profile, brand_color: e.target.value})}
+                        className="w-12 p-1 rounded-lg border-gray-200 h-11"
+                      />
+                      <Input 
+                        value={profile.brand_color || '#800020'} 
+                        onChange={(e) => setProfile({...profile, brand_color: e.target.value})}
+                        placeholder="#800020"
+                        className="flex-1 rounded-xl border-gray-200 h-11"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-burgundy-600" /> Logo de l'entreprise
+                    </Label>
+                    <div className="flex items-center gap-4 p-4 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
+                      {profile.brand_logo_url ? (
+                        <div className="relative group">
+                          <img 
+                            src={profile.brand_logo_url} 
+                            alt="Logo" 
+                            className="h-16 w-16 object-contain rounded-lg bg-white p-1 border border-gray-100" 
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => setProfile({...profile, brand_logo_url: ''})}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="h-16 w-16 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                          <Building2 className="h-8 w-8" />
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-navy-900 mb-1">Téléverser un nouveau logo</p>
+                        <p className="text-xs text-gray-500 mb-3">PNG, JPG ou SVG (Max. 2 Mo)</p>
+                        <Input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleLogoUpload}
+                          className="text-xs h-8 py-1 px-2 cursor-pointer" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-burgundy-600" /> Lien du site de l'entreprise
+                    </Label>
+                    <Input 
+                      value={profile.company_url || ''} 
+                      onChange={(e) => setProfile({...profile, company_url: e.target.value})}
+                      placeholder="https://votre-entreprise.com"
+                      className="rounded-xl border-gray-200 focus:border-burgundy-500 transition-all text-navy-900 h-11"
+                    />
+                    <p className="text-[10px] text-gray-400 pl-1">Ce lien sera inclus dans les emails envoyés à vos signataires.</p>
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-navy-800 font-semibold flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-burgundy-600" /> Webhook URL (Notifications API)
+                    </Label>
+                    <Input 
+                      value={profile.webhook_url || ''} 
+                      onChange={(e) => setProfile({...profile, webhook_url: e.target.value})}
+                      placeholder="https://votre-serveur.com/webhooks/signofika"
+                      className="rounded-xl border-gray-200 focus:border-burgundy-500 transition-all text-navy-900 h-11"
+                    />
+                    <p className="text-[10px] text-gray-400 pl-1">SignOfika enverra un POST JSON à cette adresse dès qu'un document sera signé.</p>
+                  </div>
+
+
+                </div>
+              </CardContent>
+              <CardFooter className="bg-gray-50/50 p-6 flex justify-end">
+                <Button 
+                  type="submit" 
+                  disabled={saving}
+                  className="bg-burgundy-600 hover:bg-burgundy-700 text-white rounded-xl px-8 h-12 font-bold shadow-lg shadow-burgundy-200 transition-all"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enregistrement...
+                    </>
+                  ) : (
+                    'Enregistrer les modifications'
+                  )}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="apikeys">
+          <div className="space-y-6">
+            <Card className="bg-white border-gray-200 shadow-xl rounded-3xl overflow-hidden border-t-4 border-t-burgundy-600">
+              <CardHeader>
+                <CardTitle className="text-2xl text-navy-900 font-bold">Nouvelle Clé API</CardTitle>
+                <CardDescription className="text-gray-500 text-base">Générez une clé pour automatiser vos signatures via notre API</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleCreateKey} className="space-y-4">
+                  <div className="flex gap-4">
+                    <div className="flex-[2]">
+                      <Input 
+                        placeholder="Nom de la clé (ex: Production Website)" 
+                        value={newKeyName}
+                        onChange={(e) => setNewKeyName(e.target.value)}
+                        className="rounded-xl border-gray-200 focus:border-burgundy-500 transition-all h-11 text-navy-900"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <select 
+                        value={newKeyEnvironment}
+                        onChange={(e) => setNewKeyEnvironment(e.target.value)}
+                        className="w-full rounded-xl border border-gray-200 bg-white px-3 h-11 text-sm text-navy-900 focus:border-burgundy-500 outline-none transition-all"
+                      >
+                        <option value="production">Production (Réel)</option>
+                        <option value="sandbox">Bac à sable (Sandbox)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button 
+                    type="submit" 
+                    disabled={saving || !newKeyName}
+                    className="w-full bg-navy-700 hover:bg-navy-800 text-white rounded-xl h-11 font-bold transition-all shadow-md mt-2"
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Générer la clé {newKeyEnvironment === 'production' ? 'Production' : 'Sandbox'}
+                  </Button>
+                </form>
+
+
+                {generatedKey && (
+                  <div className="mt-6 p-6 bg-burgundy-50 border border-burgundy-200 rounded-2xl animate-in fade-in slide-in-from-top-4">
+                    <div className="flex items-center gap-2 text-burgundy-800 font-bold mb-3">
+                      <ShieldCheck className="h-5 w-5" /> Attention : Copiez votre clé maintenant
+                    </div>
+                    <p className="text-sm text-burgundy-700 mb-4 font-medium">Pour votre sécurité, cette clé ne sera plus jamais affichée.</p>
+                    <div className="flex gap-2">
+                      <code className="flex-1 bg-white p-3 rounded-xl border border-burgundy-200 font-mono text-sm break-all font-bold text-navy-900 shadow-inner">
+                        {generatedKey}
+                      </code>
+                      <Button variant="outline" size="icon" onClick={() => copyToClipboard(generatedKey)} className="rounded-xl h-11 w-11 hover:bg-burgundy-100 border-burgundy-200">
+                        <Copy className="h-4 w-4 text-burgundy-700" />
+                      </Button>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => setGeneratedKey(null)} 
+                      className="mt-4 text-burgundy-600 hover:text-burgundy-800 underline p-0 h-auto font-bold"
+                    >
+                      J'ai fini de copier la clé
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-navy-900 flex items-center gap-2 pl-4">
+                <Key className="h-5 w-5 text-burgundy-600" /> Vos clés actives
+              </h3>
+              
+              {keys.length === 0 ? (
+                <div className="bg-white/50 border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center text-gray-500">
+                  <p className="font-medium text-lg mb-2">Aucune clé active</p>
+                  <p className="text-sm">Générez votre première clé ci-dessus pour commencer.</p>
+                </div>
               ) : (
-                <AlertCircle className="h-5 w-5 mr-2" />
+                <div className="grid gap-4">
+                  {keys.map((key: any) => (
+                    <Card key={key.id} className={cn(
+                      "bg-white border-gray-100 shadow-sm hover:shadow-md transition-all rounded-3xl overflow-hidden group",
+                      !key.is_active && "opacity-60 bg-gray-50/50"
+                    )}>
+                      <div className="flex items-center justify-between p-5 md:p-6">
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            "h-12 w-12 rounded-2xl flex items-center justify-center transition-colors",
+                            key.is_active 
+                              ? "bg-gray-50 text-gray-400 group-hover:bg-burgundy-50 group-hover:text-burgundy-500" 
+                              : "bg-gray-200 text-gray-400"
+                          )}>
+                            <Key className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className={cn("font-bold text-lg", key.is_active ? "text-navy-900" : "text-gray-500")}>
+                                {key.name}
+                              </h4>
+                              <span className={cn(
+                                "text-[10px] uppercase font-black px-2 py-0.5 rounded-md tracking-wider border",
+                                key.environment === 'sandbox' 
+                                  ? "bg-amber-50 text-amber-700 border-amber-200" 
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              )}>
+                                {key.environment === 'sandbox' ? 'Sandbox' : 'Production'}
+                              </span>
+                              {!key.is_active && (
+                                <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-md tracking-wider border bg-gray-100 text-gray-500 border-gray-200">
+                                  Désactivée
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 font-medium">
+                              <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-lg text-xs font-mono">
+                                {key.prefix}••••••••
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                Créée le {formatDate(key.created_at)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 mr-4">
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-tighter">
+                              {key.is_active ? 'Active' : 'Désactivée'}
+                            </span>
+                            <Switch 
+                              checked={key.is_active} 
+                              onCheckedChange={() => handleToggleKey(key.id, key.is_active)}
+                              className="data-[state=checked]:bg-burgundy-600"
+                            />
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleDeleteKey(key.id)}
+                            className="h-11 w-11 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               )}
-              <span>{message.text}</span>
             </div>
           </div>
-        )}
-
-        <Tabs 
-          defaultValue="profile" 
-          className="w-full"
-          onValueChange={setActiveTab}
-          value={activeTab}
-        >
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6">
-            <TabsTrigger value="profile" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              <span className="hidden sm:inline">Profil</span>
-            </TabsTrigger>
-            <TabsTrigger value="security" className="flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              <span className="hidden sm:inline">Sécurité</span>
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              <span className="hidden sm:inline">Notifications</span>
-            </TabsTrigger>
-            <TabsTrigger value="appearance" className="flex items-center gap-2">
-              <Palette className="h-4 w-4" />
-              <span className="hidden sm:inline">Apparence</span>
-            </TabsTrigger>
-            <TabsTrigger value="api" className="flex items-center gap-2">
-              <Key className="h-4 w-4" />
-              <span className="hidden sm:inline">API</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="profile" className="mt-0">
-            <Card className="border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl">Profil</CardTitle>
-                <CardDescription>
-                  Gérez vos informations personnelles et votre photo de profil
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col items-center mb-6">
-                  <div className="relative group">
-                    <Avatar className="h-24 w-24 bg-burgundy-100 dark:bg-burgundy-900/30 text-burgundy-700 dark:text-burgundy-300 text-2xl font-medium">
-                      <AvatarImage src={avatarUrl} />
-                      <AvatarFallback>
-                        {profile.full_name 
-                          ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase()
-                          : 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <label 
-                      htmlFor="avatar-upload"
-                      className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                      title="Changer la photo"
-                    >
-                      <ImageIcon className="h-6 w-6 text-white" />
-                      <input
-                        id="avatar-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleAvatarUpload}
-                      />
-                    </label>
-                  </div>
-                  <p className="text-sm text-gray-500 mt-2">Cliquez sur la photo pour la modifier</p>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Nom complet
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <Input
-                      id="full_name"
-                      name="full_name"
-                      type="text"
-                      value={profile.full_name}
-                      onChange={handleChange}
-                      className="pl-10"
-                      placeholder="Votre nom complet"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Adresse email
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-gray-400" />
-                    </div>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={profile.email}
-                      disabled
-                      className="pl-10 bg-gray-50 dark:bg-gray-800"
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    L'adresse email ne peut pas être modifiée
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                  Changer le mot de passe
-                </h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Mot de passe actuel
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <Input
-                        id="currentPassword"
-                        name="currentPassword"
-                        type="password"
-                        value={profile.currentPassword}
-                        onChange={handleChange}
-                        className="pl-10"
-                        placeholder="Votre mot de passe actuel"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Nouveau mot de passe
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <Input
-                        id="newPassword"
-                        name="newPassword"
-                        type="password"
-                        value={profile.newPassword}
-                        onChange={handleChange}
-                        className="pl-10"
-                        placeholder="Nouveau mot de passe"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Confirmer le nouveau mot de passe
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <Input
-                        id="confirmPassword"
-                        name="confirmPassword"
-                        type="password"
-                        value={profile.confirmPassword}
-                        onChange={handleChange}
-                        className="pl-10"
-                        placeholder="Confirmer le nouveau mot de passe"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-                  <div className="flex justify-end pt-4">
-                    <Button 
-                      type="submit" 
-                      className="bg-burgundy-600 hover:bg-burgundy-700 text-white"
-                      disabled={saving}
-                    >
-                      {saving ? 'Enregistrement...' : 'Enregistrer les modifications'}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="security" className="mt-0">
-            <Card className="border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl">Sécurité</CardTitle>
-                <CardDescription>
-                  Gérez votre mot de passe et la sécurité de votre compte
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Mot de passe actuel
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <Input
-                          id="currentPassword"
-                          name="currentPassword"
-                          type="password"
-                          value={profile.currentPassword}
-                          onChange={handleChange}
-                          className="pl-10"
-                          placeholder="Votre mot de passe actuel"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Nouveau mot de passe
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <Input
-                          id="newPassword"
-                          name="newPassword"
-                          type="password"
-                          value={profile.newPassword}
-                          onChange={handleChange}
-                          className="pl-10"
-                          placeholder="Nouveau mot de passe"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Confirmer le nouveau mot de passe
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Lock className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <Input
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type="password"
-                          value={profile.confirmPassword}
-                          onChange={handleChange}
-                          className="pl-10"
-                          placeholder="Confirmer le nouveau mot de passe"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-2">
-                    <div className="text-sm text-gray-500">
-                      Utilisez au moins 8 caractères avec des chiffres et des symboles
-                    </div>
-                    <Button 
-                      type="submit" 
-                      className="bg-burgundy-600 hover:bg-burgundy-700 text-white"
-                      disabled={saving || (!profile.currentPassword && !profile.newPassword && !profile.confirmPassword)}
-                    >
-                      {saving ? 'Enregistrement...' : 'Mettre à jour le mot de passe'}
-                    </Button>
-                  </div>
-                </form>
-
-                <div className="mt-10 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                    Exportation des données
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    Téléchargez une copie de vos données personnelles au format JSON.
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleExportData}
-                    className="text-gray-700 dark:text-gray-300"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Exporter mes données
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="notifications" className="mt-0">
-            <Card className="border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl">Préférences de notification</CardTitle>
-                <CardDescription>
-                  Gérez comment vous recevez les notifications
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="email-notifications">Notifications par email</Label>
-                      <p className="text-sm text-gray-500">Recevoir des notifications importantes par email</p>
-                    </div>
-                    <Switch 
-                      id="email-notifications" 
-                      checked={notifications.email}
-                      onCheckedChange={(checked) => handleNotificationChange('email', checked)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="document-signed">Document signé</Label>
-                      <p className="text-sm text-gray-500">Recevoir une notification quand un document est signé</p>
-                    </div>
-                    <Switch 
-                      id="document-signed" 
-                      checked={notifications.documentSigned}
-                      onCheckedChange={(checked) => handleNotificationChange('documentSigned', checked)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="document-received">Nouveau document</Label>
-                      <p className="text-sm text-gray-500">Recevoir une notification pour les nouveaux documents</p>
-                    </div>
-                    <Switch 
-                      id="document-received" 
-                      checked={notifications.documentReceived}
-                      onCheckedChange={(checked) => handleNotificationChange('documentReceived', checked)}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="weekly-digest">Résumé hebdomadaire</Label>
-                      <p className="text-sm text-gray-500">Recevoir un résumé hebdomadaire de l'activité</p>
-                    </div>
-                    <Switch 
-                      id="weekly-digest" 
-                      checked={notifications.weeklyDigest}
-                      onCheckedChange={(checked) => handleNotificationChange('weeklyDigest', checked)}
-                    />
-                  </div>
-
-                  <div className="flex justify-end pt-4">
-                    <Button 
-                      className="bg-burgundy-600 hover:bg-burgundy-700 text-white"
-                      onClick={() => setMessage({ type: 'success', text: 'Préférences de notification mises à jour' })}
-                    >
-                      Enregistrer les préférences
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="appearance" className="mt-0">
-            <Card className="border-gray-200 dark:border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-xl">Apparence</CardTitle>
-                <CardDescription>
-                  Personnalisez l'apparence de l'application
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Thème</h3>
-                    <div className="grid gap-4 grid-cols-3">
-                      <button
-                        onClick={() => setTheme('light')}
-                        className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-colors ${
-                          theme === 'light' 
-                            ? 'border-burgundy-500 bg-burgundy-50 dark:bg-burgundy-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="w-full h-20 bg-white rounded border border-gray-200 dark:border-gray-700 mb-2 overflow-hidden">
-                          <div className="h-3 bg-gray-100 border-b border-gray-200 dark:border-gray-700" />
-                          <div className="p-2">
-                            <div className="h-2 bg-gray-200 rounded w-3/4 mb-1" />
-                            <div className="h-2 bg-gray-100 rounded w-1/2" />
-                          </div>
-                        </div>
-                        <span className="text-sm font-medium">Clair</span>
-                      </button>
-
-                      <button
-                        onClick={() => setTheme('dark')}
-                        className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-colors ${
-                          theme === 'dark' 
-                            ? 'border-burgundy-500 bg-burgundy-50 dark:bg-burgundy-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="w-full h-20 bg-gray-900 rounded border border-gray-700 mb-2 overflow-hidden">
-                          <div className="h-3 bg-gray-800 border-b border-gray-700" />
-                          <div className="p-2">
-                            <div className="h-2 bg-gray-700 rounded w-3/4 mb-1" />
-                            <div className="h-2 bg-gray-800 rounded w-1/2" />
-                          </div>
-                        </div>
-                        <span className="text-sm font-medium">Sombre</span>
-                      </button>
-
-                      <button
-                        onClick={() => setTheme('system')}
-                        className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-colors ${
-                          theme === 'system' 
-                            ? 'border-burgundy-500 bg-burgundy-50 dark:bg-burgundy-900/20' 
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="w-full h-20 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 mb-2 overflow-hidden">
-                          <div className="h-3 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700" />
-                          <div className="p-2">
-                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-1" />
-                            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded w-1/2" />
-                          </div>
-                        </div>
-                        <span className="text-sm font-medium">Système</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="pt-4">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Densité de l'interface</h3>
-                    <div className="flex gap-4">
-                      <button className="px-4 py-2 text-sm font-medium rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-                        Confortable
-                      </button>
-                      <button className="px-4 py-2 text-sm font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300">
-                        Compact
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="api" className="mt-0">
-            <ApiKeysSettings />
-          </TabsContent>
-        </Tabs>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

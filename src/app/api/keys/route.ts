@@ -1,8 +1,39 @@
 import { NextResponse } from 'next/server'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 
+
+export async function GET(request: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    }
+
+    const { data: keys, error: dbError } = await (supabase as any)
+      .from('api_keys')
+      .select('id, name, created_at, last_used_at, expires_at, prefix, environment, is_active')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+
+
+    if (dbError) throw dbError
+
+    return NextResponse.json({ keys })
+  } catch (error) {
+    console.error('Error fetching API keys:', error)
+    return NextResponse.json(
+      { error: 'Erreur lors de la récupération des clés API' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(request: Request) {
+
   try {
     // Créer un client Supabase
     const supabase = await createClient()
@@ -17,7 +48,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { name } = await request.json()
+    const { name, environment = 'production' } = await request.json()
     
     if (!name) {
       return NextResponse.json(
@@ -26,10 +57,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Générer une clé API sécurisée
-    const prefix = 'sfk_'
+    // Générer une clé API sécurisée avec préfixes distincts
+    const isSandbox = environment === 'sandbox'
+    const prefix = isSandbox ? 'sfk_test_' : 'sfk_live_'
     const key = prefix + randomBytes(32).toString('hex')
-    const keyHash = require('crypto').createHash('sha256').update(key).digest('hex')
+    const keyHash = createHash('sha256').update(key).digest('hex')
+
+
 
     // Enregistrer la clé dans la base de données
     const { data: keyData, error: dbError } = await (supabase as any)
@@ -39,8 +73,10 @@ export async function POST(request: Request) {
         name,
         key_hash: keyHash,
         prefix,
+        environment,
         expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() // Expire dans 1 an
       })
+
       .select()
       .single()
 
@@ -118,6 +154,40 @@ export async function DELETE(request: Request) {
     console.error('Error revoking API key:', error)
     return NextResponse.json(
       { error: 'Erreur lors de la révocation de la clé API' },
+      { status: 500 }
+    )
+  }
+}
+export async function PATCH(request: Request) {
+  try {
+    const { id, is_active } = await request.json()
+    
+    if (!id) {
+      return NextResponse.json({ error: 'ID manquant' }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    }
+
+    const { data: key, error: dbError } = await (supabase as any)
+      .from('api_keys')
+      .update({ is_active })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+
+    if (dbError) throw dbError
+
+    return NextResponse.json({ key })
+  } catch (error) {
+    console.error('Error updating key status:', error)
+    return NextResponse.json(
+      { error: 'Erreur lors de la mise à jour de la clé' },
       { status: 500 }
     )
   }

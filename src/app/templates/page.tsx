@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { FileText, Plus, FolderOpen } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { DeleteTemplateButton } from '@/components/delete-template-button'
+
 
 export default async function TemplatesPage() {
   const supabase = await createClient()
@@ -51,10 +53,14 @@ export default async function TemplatesPage() {
                     <div className="p-3 bg-burgundy-600/20 rounded-lg">
                       <FileText className="h-8 w-8 text-burgundy-400" />
                     </div>
-                    {template.folder_id && (
-                      <FolderOpen className="h-5 w-5 text-gray-400" />
-                    )}
+                    <div className="flex flex-col items-end gap-2">
+                      <DeleteTemplateButton id={template.id} name={template.name} />
+                      {template.folder_id && (
+                        <FolderOpen className="h-5 w-5 text-gray-400" />
+                      )}
+                    </div>
                   </div>
+
                   <CardTitle className="mt-4 text-navy-900">{template.name}</CardTitle>
                   <CardDescription className="text-gray-600">
                     {template.description || 'Aucune description'}

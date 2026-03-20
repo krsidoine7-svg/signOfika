@@ -35,6 +35,7 @@ export async function updateSession(request: NextRequest) {
   // Protected routes
   if (
     !user &&
+    request.nextUrl.pathname !== '/' && // Allow access to landing page for guests
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/signup') &&
     !request.nextUrl.pathname.startsWith('/s/') && // Public signing links

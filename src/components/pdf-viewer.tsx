@@ -7,9 +7,24 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2 } from 'lucide-reac
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 
-// Configuration du worker PDF.js
+// Configuration du worker PDF.js local
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+}
+
+
+
+interface Field {
+  id: string
+  type: 'signature' | 'text' | 'date' | 'checkbox'
+
+  page: number
+  x: number
+  y: number
+  width: number
+  height: number
+  label: string
+  required: boolean
 }
 
 interface PdfViewerProps {
@@ -17,9 +32,10 @@ interface PdfViewerProps {
   onPageClick?: (pageNumber: number, x: number, y: number) => void
   showControls?: boolean
   className?: string
+  fields?: Field[]
 }
 
-export function PdfViewer({ url, onPageClick, showControls = true, className = '' }: PdfViewerProps) {
+export function PdfViewer({ url, onPageClick, showControls = true, className = '', fields = [] }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0)
   const [pageNumber, setPageNumber] = useState<number>(1)
   const [scale, setScale] = useState<number>(1.0)
@@ -70,12 +86,23 @@ export function PdfViewer({ url, onPageClick, showControls = true, className = '
     onPageClick(pageNumber, x, y)
   }
 
-  // Mémoïser les props pour éviter les re-renders inutiles
-  const fileOptions = useMemo(() => ({ url }), [url])
+  // Filtrer les champs pour la page actuelle
+  const currentPageFields = fields.filter(f => f.page === pageNumber)
+
+  // Optimisation PDF.js : On mémoïse les objets passés à <Document />
+  const fileOptions = useMemo(() => ({ 
+    url,
+    // prevent unnecessary re-requests
+    withCredentials: false
+  }), [url])
+
   const pdfOptions = useMemo(() => ({
-    cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+    cMapUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/cmaps/`,
     cMapPacked: true,
+    standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/standard_fonts/`
   }), [])
+
+
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -137,6 +164,7 @@ export function PdfViewer({ url, onPageClick, showControls = true, className = '
         {!error && (
           <div className="flex justify-center">
             <div
+              className="relative"
               onClick={handlePageClick}
               style={{ cursor: onPageClick ? 'crosshair' : 'default' }}
             >
@@ -155,6 +183,35 @@ export function PdfViewer({ url, onPageClick, showControls = true, className = '
                   className="shadow-lg"
                 />
               </Document>
+
+              {/* Field Overlays */}
+              {!loading && currentPageFields.map((field) => (
+                <div
+                  key={field.id}
+                  className={`absolute flex items-center justify-center rounded border-2 border-dashed ${
+                    field.type === 'signature' 
+                      ? 'border-blue-400 bg-blue-50/30' 
+                      : field.type === 'text'
+                        ? 'border-green-400 bg-green-50/30'
+                        : 'border-purple-400 bg-purple-50/30'
+                  }`}
+                  style={{
+                    left: field.x * scale,
+                    top: field.y * scale,
+                    width: field.width * scale,
+                    height: field.height * scale,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <span className="text-[10px] font-bold text-gray-600 opacity-60 uppercase pointer-events-none">
+                    {field.type === 'signature' && '✍️ Signature'}
+                    {field.type === 'text' && '📝 Texte'}
+                    {field.type === 'date' && '📅 Date'}
+                    {field.type === 'checkbox' && '⬜ Case'}
+                  </span>
+
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -163,9 +220,14 @@ export function PdfViewer({ url, onPageClick, showControls = true, className = '
       {/* Info */}
       {showControls && numPages > 0 && (
         <div className="text-xs text-center text-gray-500 dark:text-gray-400">
-          {onPageClick && '💡 Cliquez sur le PDF pour placer un champ de signature'}
+          {onPageClick ? (
+            '💡 Cliquez sur le PDF pour placer un champ'
+          ) : (
+            fields.length > 0 ? '🔍 Les zones en pointillés indiquent les endroits à remplir ou signer' : null
+          )}
         </div>
       )}
     </div>
   )
 }
+

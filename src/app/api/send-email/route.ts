@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
           to,
           ...params
         })
+
         break
         
       case 'signature-completed':
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
           to,
           ...params
         })
+
         break
         
       default:

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateSlug } from '@/lib/utils'
+import { logAuditEvent } from '@/lib/audit'
+
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -38,21 +40,55 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { template_id, submitters } = body
+  const { template_id, submitters, is_sequential = false, expires_in_days, reminder_interval_days } = body
+
 
   const slug = generateSlug()
 
-  // Create submission
-  const { data: submission, error: submissionError } = await supabase
-    .from('submissions')
-    .insert({
-      template_id,
-      slug,
-      user_id: user.id,
-      status: 'pending',
-    })
-    .select()
-    .single()
+    // Get template reminder settings and user branding
+    const { data: template } = await supabase
+      .from('templates')
+      .select('name, reminder_interval_days')
+      .eq('id', template_id)
+      .single()
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('brand_color, brand_logo_url, company_url, full_name')
+      .eq('id', user.id)
+      .single()
+
+
+    const intervalDays = reminder_interval_days || template?.reminder_interval_days || 2
+    const nextReminderAt = new Date()
+    nextReminderAt.setDate(nextReminderAt.getDate() + intervalDays)
+
+    // Calcul de la date d'expiration si spécifiée
+    let expiresAt: string | null = null
+    if (expires_in_days && parseInt(expires_in_days) > 0) {
+      const expDate = new Date()
+      expDate.setDate(expDate.getDate() + parseInt(expires_in_days))
+      expiresAt = expDate.toISOString()
+    }
+
+    // Create submission
+    const { data: submission, error: submissionError } = await supabase
+      .from('submissions')
+      .insert({
+        template_id,
+        slug,
+        user_id: user.id,
+        status: 'pending',
+        reminder_interval_days: intervalDays,
+        next_reminder_at: nextReminderAt.toISOString(),
+        is_sequential: !!is_sequential,
+        expires_at: expiresAt,
+      })
+
+
+      .select()
+      .single()
+
 
   if (submissionError) {
     return NextResponse.json({ error: submissionError.message }, { status: 500 })
@@ -77,17 +113,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: submittersError.message }, { status: 500 })
     }
 
-    // Récupérer le nom du template pour les emails
-    const { data: template } = await supabase
-      .from('templates')
-      .select('name')
-      .eq('id', template_id)
-      .single()
+    // Le nom du template a déjà été récupéré ci-dessus
+
 
     // Envoyer les emails d'invitation
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     
-    for (const submitterData of submittersData) {
+    // Si séquentiel, on n'envoie qu'au premier signataire (position 0)
+    const submittersToNotify = is_sequential && submittersData.length > 0
+      ? [submittersData.sort((a: any, b: any) => a.position - b.position)[0]]
+      : submittersData
+
+    for (const submitterData of submittersToNotify) {
+
       try {
         await fetch(`${appUrl}/api/send-email`, {
           method: 'POST',
@@ -96,18 +134,45 @@ export async function POST(request: NextRequest) {
             to: submitterData.email,
             type: 'signature-request',
             recipientName: submitterData.name,
-            senderName: user.email || 'SignOfika',
+            senderName: profile?.full_name || user.email || 'SignOfika',
             documentName: template?.name || 'Document',
-            signatureUrl: `${appUrl}/s/${submitterData.slug}`
+            signatureUrl: `${appUrl}/s/${submitterData.slug}`,
+            brandLogoUrl: profile?.brand_logo_url,
+            companyUrl: profile?.company_url,
+            brandColor: profile?.brand_color,
           })
+
+        })
+        await logAuditEvent({
+          event_type: 'email_sent',
+          submission_id: submission.id,
+          user_id: user.id,
+          event_data: {
+            to: submitterData.email,
+            recipientName: submitterData.name,
+            type: 'signature-request'
+          },
+          request
         })
         console.log(`📧 Email envoyé à ${submitterData.email}`)
       } catch (error) {
         console.error('Erreur envoi email:', error)
-        // On continue même si l'email échoue
       }
     }
   }
 
+  // Log final creation
+  await logAuditEvent({
+    event_type: 'submission_created',
+    submission_id: submission.id,
+    user_id: user.id,
+    event_data: {
+      template_id,
+      submitter_count: submitters?.length || 0
+    },
+    request
+  })
+
   return NextResponse.json({ submission }, { status: 201 })
 }
+

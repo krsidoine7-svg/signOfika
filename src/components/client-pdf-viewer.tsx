@@ -21,8 +21,10 @@ interface ClientPdfViewerProps {
   url: string
   showControls?: boolean
   className?: string
+  fields?: any[]
 }
 
-export function ClientPdfViewer({ url, showControls = true, className = '' }: ClientPdfViewerProps) {
-  return <PdfViewer url={url} showControls={showControls} className={className} />
+export function ClientPdfViewer({ url, showControls = true, className = '', fields = [] }: ClientPdfViewerProps) {
+  return <PdfViewer url={url} showControls={showControls} className={className} fields={fields} />
 }
+

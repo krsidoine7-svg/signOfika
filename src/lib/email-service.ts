@@ -7,6 +7,9 @@ export const EmailService = {
     senderName: string
     documentName: string
     signatureUrl: string
+    brandLogoUrl?: string
+    companyUrl?: string
+    brandColor?: string
   }) {
     return sendSignatureRequest({
       to: params.to,
@@ -14,7 +17,11 @@ export const EmailService = {
       documentName: params.documentName,
       signUrl: params.signatureUrl,
       message: `${params.senderName} vous a envoyé ce document à signer.`,
+      brandLogoUrl: params.brandLogoUrl,
+      companyUrl: params.companyUrl,
+      brandColor: params.brandColor,
     })
+
   },
 
   async sendSignatureCompleted(params: {
@@ -23,13 +30,20 @@ export const EmailService = {
     documentName: string
     submitterName: string
     downloadUrl?: string
+    brandLogoUrl?: string
+    companyUrl?: string
+    brandColor?: string
   }) {
     return sendSignatureCompleted({
       to: params.to,
       documentName: params.documentName,
       downloadUrl: params.downloadUrl || '#',
       senderName: params.submitterName,
+      brandLogoUrl: params.brandLogoUrl,
+      companyUrl: params.companyUrl,
+      brandColor: params.brandColor,
     })
+
   },
 
   async sendTestEmail(to: string) {
